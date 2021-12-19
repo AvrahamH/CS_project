@@ -7,7 +7,7 @@
 #define MAX_LABEL 50
 
 typedef struct {
-	const char* name;
+	char* name;
 	int address;
 } label;
 
