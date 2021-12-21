@@ -12,9 +12,9 @@ typedef struct {
 } label;
 
 typedef struct {
-	const char* cmd_name;
-	char cmd_num;
-} cmd_opcode;
+	const char* name;
+	char num;
+} opcode;
 
 typedef struct {
 	char *name;
@@ -27,7 +27,7 @@ typedef struct {
 } cmd;
 
 // Describing all given commands by name and number
-const cmd_opcode commands[] = {
+const opcode commands[] = {
 	{"add", 0},
 	{"sub", 1},
 	{"mac", 2},
@@ -50,6 +50,25 @@ const cmd_opcode commands[] = {
 	{"in", 19},
 	{"out", 20},
 	{"halt", 21}
+};
+
+const opcode regs[] = {
+	{"$zero", 0},
+	{"$imm1", 1},
+	{"$imm2", 2},
+	{"$v0", 3},
+	{"$a0", 4},
+	{"$a1", 5},
+	{"$a2", 6},
+	{"$t0", 7},
+	{"$t1", 8},
+	{"$t2", 9},
+	{"$s0", 10},
+	{"$s1", 11},
+	{"$s2", 12},
+	{"$gp", 13},
+	{"$sp", 14},
+	{"$ra", 15}
 };
 
 #endif // COSNTS_H
