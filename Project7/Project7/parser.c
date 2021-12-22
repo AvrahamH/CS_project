@@ -36,7 +36,7 @@ uint64_t label2addr(char *name, int size, label *arr) {
 void parse_cmd(char *line, label *label_arr, int label_count, char *imemin, char *dmemin) {
 	FILE *fp, *dmem;
 	int count = 0, addr = 0, words[MAX_DMEM] = { 0 }, max_addr = 0, i = 0;
-	uint64_t fline = 0;
+	uint16_t fline[7] = { 0 };
 	char *token, temp_line[MAX_STRLEN];
 
 	strcpy(temp_line, line);
@@ -61,24 +61,24 @@ void parse_cmd(char *line, label *label_arr, int label_count, char *imemin, char
 		while (token != NULL) {
 			switch (count) {
 				case 0:
-					fline += str2num(token, 22, commands) << 40;
+					fline[0] = str2num(token, 22, commands);
 					break;
 				case 1:
 				case 2:
 				case 3:
 				case 4:
-					fline += str2num(token, 16, regs) << (40 - count * 4);
+					fline[count] = str2num(token, 16, regs);
 					break;
 				case 5:
 				case 6:
 					addr = label2addr(token, label_count, label_arr);
 					if (addr != -1)
-						fline += addr << (12 - (count - 5) * 12);
+						fline[count] = addr;
 					else {
 						if (*token == '0' && (*(token + 1) == 'x' || *(token + 1) == 'X'))
-							fline += hex2dec(token + 2) << (12 - (count - 5) * 12);
+							fline[count] = hex2dec(token + 2);
 						else
-							fline += atoi(token) << (12 - (count - 5) * 12);
+							fline[count] = atoi(token);
 					}
 					break;
 
@@ -86,7 +86,7 @@ void parse_cmd(char *line, label *label_arr, int label_count, char *imemin, char
 			token = strtok(NULL, " ,\n\t\r");
 			count++;
 		}
-		fprintf(fp, "%012llX\n", fline);
+		fprintf(fp, "%02X%01X%01X%01X%01X%03X%03X\n", fline[0], fline[1], fline[2], fline[3], fline[4], fline[5] & 0XFFF, fline[6] & 0XFFF);
 	}
 
 	dmem = fopen(dmemin, "w+");
