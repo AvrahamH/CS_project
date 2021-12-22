@@ -5,6 +5,7 @@
 
 #define MAX_STRLEN 500
 #define MAX_LABEL 50
+#define MAX_DMEM 4096
 
 typedef struct {
 	char* name;

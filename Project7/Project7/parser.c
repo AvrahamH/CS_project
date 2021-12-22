@@ -35,7 +35,7 @@ uint64_t label2addr(char *name, int size, label *arr) {
 
 void parse_cmd(char *line, label *label_arr, int label_count, char *imemin, char *dmemin) {
 	FILE *fp, *dmem;
-	int count = 0, addr = 0;
+	int count = 0, addr = 0, words[MAX_DMEM] = { 0 }, max_addr = 0, i = 0;
 	uint64_t fline = 0;
 	char *token, temp_line[MAX_STRLEN];
 
@@ -45,31 +45,19 @@ void parse_cmd(char *line, label *label_arr, int label_count, char *imemin, char
 	token = strtok(temp_line, "#");
 	token = strtok(token, " \r\n\t");
 
-	// if (!strcmp(token, ".word")) {
-	// 	dmem = fopen(dmemin, "r+");
-	// 	token = strtok(NULL, " ,\n\t\r");
-	// 	if (*token == '0' && (*(token + 1) == 'x' || *(token + 1) == 'X'))
-	// 		addr = hex2dec(token + 2);
-	// 	else 
-	// 		addr = atoi(token);
+	if (!strcmp(token, ".word")) {
+		token = strtok(NULL, " ,\n\t\r");
+		if (*token == '0' && (*(token + 1) == 'x' || *(token + 1) == 'X'))
+			addr = hex2dec(token + 2);
+		else 
+			addr = atoi(token);
 
-	// 	token = strtok(NULL, " ,\n\t\r");
-	// 	if (*token == '0' && (*(token + 1) == 'x' || *(token + 1) == 'X'))
-	// 		fline = (uint64_t)hex2dec(token + 2);
-	// 	else 
-	// 		fline = (uint64_t)atoi(token);
-
-	// 	while (fgets(temp_line, MAX_STRLEN, dmem)) {
-	// 		if (count == addr) {
-	// 			fprintf(dmem, "%08llX\n", fline);
-	// 			break;
-	// 		}
-	// 		if (count <= addr)
-	// 			fprintf(dmem, "%08llX\n", (uint64_t)atoi(temp_line));
-	// 		count++;
-	// 	}
-	// 	fclose(dmem);
-	// } else {
+		token = strtok(NULL, " ,\n\t\r");
+		if (*token == '0' && (*(token + 1) == 'x' || *(token + 1) == 'X'))
+			words[addr] = hex2dec(token + 2);
+		else 
+			words[addr] = atoi(token);
+	} else {
 		while (token != NULL) {
 			switch (count) {
 				case 0:
@@ -99,7 +87,17 @@ void parse_cmd(char *line, label *label_arr, int label_count, char *imemin, char
 			count++;
 		}
 		fprintf(fp, "%012llX\n", fline);
-	// }
+	}
+
+	dmem = fopen(dmemin, "w+");
+	for (i = 0; i < MAX_DMEM; i++)
+		max_addr = ((i > max_addr) && (words[i] != 0)) ? i : max_addr;
+
+	for (i = 0; i < max_addr + 1; i++)
+		fprintf(dmem, "%08X\n", words[i]);
+
+	fclose(dmem);
+
 	fclose(fp);
 }
 
