@@ -57,6 +57,8 @@ void parse_cmd(char *line, label *label_arr, int label_count, char *imemin, char
 			words[addr] = hex2dec(token + 2);
 		else 
 			words[addr] = atoi(token);
+
+		max_addr = (addr > max_addr) ? addr : max_addr;
 	} else {
 		while (token != NULL) {
 			switch (count) {
@@ -90,8 +92,6 @@ void parse_cmd(char *line, label *label_arr, int label_count, char *imemin, char
 	}
 
 	dmem = fopen(dmemin, "w+");
-	for (i = 0; i < MAX_DMEM; i++)
-		max_addr = ((i > max_addr) && (words[i] != 0)) ? i : max_addr;
 
 	for (i = 0; i < max_addr + 1; i++)
 		fprintf(dmem, "%08X\n", words[i]);
