@@ -223,18 +223,24 @@ void write_clk(const char fname[], int clks) {
 
 void sim(char const *argv[]) {
 	int line = 0;
-	uint32_t hw_regs[HW_COUNT] = {0}, regs[REG_COUNT] = {0}, dmem[MAX_MEM_LEN] = {0};
+	uint32_t hw_regs[HW_COUNT] = {0}, regs[REG_COUNT] = {0};
 	uint16_t PC = 0;
-	FILE *imemin, *dmemin, *clk;
+	FILE *imemin, *dmemin, *dmemout;
 	cmd lines[MAX_MEM_LEN] = {0};
 
+	dmem dmemout = {
+		.max_addr = 0,
+		.mem = {0}
+	};
+	dmemin = fopen(argv[DMEMIN], "r");
+	for (line = 0; fscanf(dmemin, "%08X", &dmemout.mem[line]) != EOF; line++);
+	fclose(dmemin);
+	dmemout.max_addr = line - 1;
+
 	imemin = fopen(argv[IMEMIN], "r");
-	while(fscanf(imemin, "%02X%01X%01X%01X%01X%03X%03X", &lines[line].name, &lines[line].rd, &lines[line].rs, &lines[line].rt,&lines[line].rm, &lines[line].imm1, &lines[line].imm2) != EOF) {
-		// cmd_regs(lines, hw_regs, regs);
-		line++;
-	}
+	for (line = 0; fscanf(imemin, "%02X%01X%01X%01X%01X%03X%03X", &lines[line].name, &lines[line].rd, &lines[line].rs, &lines[line].rt, &lines[line].rm, &lines[line].imm1, &lines[line].imm2) != EOF; line++);
+	fclose(imemin);
+	// cmd_regs(lines, hw_regs, regs);
 
 	write_clk(argv[CYCLES], hw_regs[CLKS]);
-	
-	fclose(imemin);
 }

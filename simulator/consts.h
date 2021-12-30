@@ -89,9 +89,14 @@ typedef struct {
 	uint8_t rs;
 	uint8_t rt;
 	uint8_t rm;
-	uint16_t imm1;
-	uint16_t imm2;
+	int16_t imm1;
+	int16_t imm2;
 } cmd;
+
+typedef struct {
+	int max_addr;
+	uint16_t mem[MAX_MEM_LEN];
+} dmem;
 
 // Describing all given commands by name and number
 const opcode commands[] = {
