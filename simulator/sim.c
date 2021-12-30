@@ -4,12 +4,12 @@
 #define TO_SIGNED(num) ((num & 0xFFF) | ((num & 0x800) ? ~0xFFF : 0))
 
 void cmd_regs(cmd lines[MAX_MEM_LEN], uint32_t hw_regs[HW_COUNT],int regs[REG_COUNT],const * argv[]){
-	int pc = 0; cmd_line = 0;
+	int pc = 0, cmd_line = 0 , msb_1 = 1 << 3 , tmp_reg = 0 ;
 	// now we are going through the command lines and change the registers according to the command 
 	while(line[cmd_Line].name != 21){
 		write_trace(line[cmd_line],pc,argv[TRACE],regs); // every command we wanr to update the trace
 		// chacking if there is a illegal change to a ZERO or IMM registers  
-		if(lines[cmd_line].rd  == ZERO | lines[cmd_line].rd  == IMM1 | lines[cmd_line].rd  == IMM2  ){
+		if(lines[cmd_line].rd  == ZERO || lines[cmd_line].rd  == IMM1 || lines[cmd_line].rd  == IMM2  ){
 			pc ++;
 			hw_regs[CLKS]++;
 			cmd_line ++;
@@ -17,20 +17,20 @@ void cmd_regs(cmd lines[MAX_MEM_LEN], uint32_t hw_regs[HW_COUNT],int regs[REG_CO
 			}
 		// else we change the imm registers if we use them in the current command and  implement the command according to the operation 
 		else{
-			if((lines[cmd_line].rs == IMM1 | lines[cmd_line].rs == IMM2)| (lines[cmd_line].rt == IMM1 | lines[cmd_line].rt == IMM2) | (lines[cmd_line].rm == IMM1 | lines[cmd_line].rm == IMM2)){
-				if(lines[cmd_line].rs == IMM1 | lines[cmd_line].rs == IMM2){
+			if((lines[cmd_line].rs == IMM1 || lines[cmd_line].rs == IMM2)|| (lines[cmd_line].rt == IMM1 || lines[cmd_line].rt == IMM2) || (lines[cmd_line].rm == IMM1 || lines[cmd_line].rm == IMM2)){
+				if(lines[cmd_line].rs == IMM1 || lines[cmd_line].rs == IMM2){
 					if(lines[cmd_line].rs == IMM1)
 						lines[cmd_line].rs == lines[cmd_line].imm1;
 					else
 						lines[cmd_line].rs == lines[cmd_line].imm2;	
 				}	
-				if(lines[cmd_line].rt == IMM1 | lines[cmd_line].rt == IMM2){
+				if(lines[cmd_line].rt == IMM1 || lines[cmd_line].rt == IMM2){
 					if(lines[cmd_line].rt == IMM1)
 						lines[cmd_line].rt == lines[cmd_line].imm1;
 					else
 						lines[cmd_line].rt == lines[cmd_line].imm2;			
 				}
-				if(lines[cmd_line].rm == IMM1 | lines[cmd_line].rm == IMM2){
+				if(lines[cmd_line].rm == IMM1 || lines[cmd_line].rm == IMM2){
 					if(lines[cmd_line].rm == IMM1)
 						lines[cmd_line].rm == lines[cmd_line].imm1;
 					else
@@ -81,14 +81,22 @@ void cmd_regs(cmd lines[MAX_MEM_LEN], uint32_t hw_regs[HW_COUNT],int regs[REG_CO
 					cmd_line ++;
 					break;
 				case 7 :
-					//	NEED TO DO ARITH SHIFT WITH SIGN EXTANSION 
-					break;
-				case 8:
 					regs[lines[cmd_line].rd] = regs[lines[cmd_line].rs] >> regs[lines[cmd_line].rt] ;
 					pc ++;
 					hw_regs[CLKS]++;
 					cmd_line ++;
 					break;
+				case 8:
+					if(regs[lines[cmd_line].rs] & msb_1){
+						regs[lines[cmd_line].rd] = (int)((unsigned int)regs[lines[cmd_line].rs] >> regs[lines[cmd_line].rt]) ; 
+					}
+					else
+						regs[lines[cmd_line].rd] = regs[lines[cmd_line].rs] >> regs[lines[cmd_line].rt] ;
+					pc ++;
+					hw_regs[CLKS]++;
+					cmd_line ++;
+					break;
+					
 				case 9 :
 					if(regs[lines[cmd_line].rs] == regs[lines[cmd_line].rt]){
 						pc = regs[lines[cmd_line].rm];
