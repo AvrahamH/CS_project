@@ -10,6 +10,7 @@
 #define MAX_MEM_LEN	4096
 #define REG_LEN		4
 #define IMM_LEN		12
+#define MON_SIZE	0x10000
 
 // Registers
 #define ZERO 	0
@@ -72,6 +73,11 @@
 #define MON_T	13
 #define MON_YUV	14
 
+// opcodes
+enum opcodes {ADD, SUB, MAC, AND, OR, XOR, SLL, SRA, SRL, BEQ, BNE, BLT, BGT, BLE, BGE, JAL, LW, SW, RETI, IN, OUT, HALT};
+
+#define IS_WRITEABLE(num) (num == ZERO || num == IMM1 || num == IMM2)
+#define IS_IMM(num) (num == IMM1 || num == IMM2)
 
 typedef struct {
 	char* name;
@@ -96,51 +102,32 @@ typedef struct {
 typedef struct {
 	int max_addr;
 	uint16_t mem[MAX_MEM_LEN];
-} dmem;
+} mem;
 
-// Describing all given commands by name and number
-const opcode commands[] = {
-	{"add", 0},
-	{"sub", 1},
-	{"mac", 2},
-	{"and", 3},
-	{"or", 4},
-	{"xor", 5},
-	{"sll", 6},
-	{"sra", 7},
-	{"srl", 8},
-	{"beq", 9},
-	{"bne", 10},
-	{"blt", 11},
-	{"bgt", 12},
-	{"ble", 13},
-	{"bge", 14},
-	{"jal", 15},
-	{"lw", 16},
-	{"sw", 17},
-	{"reti", 18},
-	{"in", 19},
-	{"out", 20},
-	{"halt", 21}
-};
-
-const opcode regs[] = {
-	{"$zero", 0},
-	{"$imm1", 1},
-	{"$imm2", 2},
-	{"$v0", 3},
-	{"$a0", 4},
-	{"$a1", 5},
-	{"$a2", 6},
-	{"$t0", 7},
-	{"$t1", 8},
-	{"$t2", 9},
-	{"$s0", 10},
-	{"$s1", 11},
-	{"$s2", 12},
-	{"$gp", 13},
-	{"$sp", 14},
-	{"$ra", 15}
+const char hw_regs_names[HW_COUNT] = {
+	"irq0enable",
+	"irq1enable",
+	"irq2enable",
+	"irq0status",
+	"irq1status",
+	"irq2status",
+	"irqhandler",
+	"irqreturn",
+	"clks",
+	"leds",
+	"display7seg",
+	"timerenable",
+	"timercurrent",
+	"timermax",
+	"diskcmd",
+	"disksector",
+	"diskbuffer",
+	"diskstatus",
+	"reserved",
+	"reserved",
+	"monitoraddr",
+	"monitordata",
+	"monitorcmd"
 };
 
 #endif // COSNTS_H
