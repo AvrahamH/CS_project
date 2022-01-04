@@ -75,14 +75,62 @@ void write_mem(mem *memory, int type, char const *argv[]) {
 	fclose(fp);
 }
 
-void cmd_regs(cmd lines[MAX_MEM_LEN], mem *dmemout, mem *diskout, uint32_t hw_regs[HW_COUNT], uint32_t regs[REG_COUNT], char const *argv[]) {
-	int pc = 0, cmd_line = 0, msb_1 = 1 << 31;
+void write_disk(disk *memory, int type, char const *argv[]) {
+	FILE *fp;
+	fp = fopen(argv[type], "w+");
+	for (int i = 0; i < memory->max_addr; i++)
+		fprintf(fp, "%08X\n", memory->mem[i]);
+	fclose(fp);
+}
+/**
+ * irq_flag: equals 0 by default, equals 1 if we're in an interrupt
+ * disk_flag: to indicate if disk cmd, buffer and sector has been received
+ */
+void cmd_regs(cmd lines[MAX_MEM_LEN], mem *dmemout, disk *diskout, uint32_t hw_regs[HW_COUNT], uint32_t regs[REG_COUNT], char const *argv[]) {
+	int pc = 0, msb_1 = 1 << 31, irq = 0, irq2arr[0xFFFFFFFF], irq2clk = 0, irq_flag = 0, disk_timer = 0, disk_flag = 0;
 	uint8_t monitor[MON_SIZE] = {0}, temp_reg_val = 0;
 	cmd *temp_line;
+	FILE *irq2in;
+
+	irq2in = fopen(argv[IRQ2IN], "r");
+	for (int i = 0; fscanf(irq2in, "%d\n", &irq2clk) != EOF; i++)
+		irq2arr[irq2clk] = 1;
+	fclose(irq2in);
 
 	// now we are going through the command lines and change the registers according to the command 
-	while((lines[cmd_line].name != HALT) && (cmd_line < 4095)) {
-		temp_line = lines + cmd_line;
+	while((lines[pc].name != HALT) && (pc < 4095)) {
+
+		if (irq2arr[hw_regs[CLKS]]) //handling 
+			hw_regs[IRQ2S] = 1;
+
+		if (hw_regs[TIMER_E]) {	//handling timer
+			hw_regs[TIMER_C]++;
+			if (hw_regs[TIMER_MAX] == hw_regs[TIMER_C]) {
+				hw_regs[IRQ0S] = 1;
+				hw_regs[TIMER_C] = 0;
+			}
+		}
+
+		irq = (hw_regs[IRQ0E] && hw_regs[IRQ0S]) || (hw_regs[IRQ1E] && hw_regs[IRQ1S]) || (hw_regs[IRQ1E] && hw_regs[IRQ2S]);
+
+		if (irq && !irq_flag) {
+			irq_flag = 1;
+			pc = hw_regs[IRQ_H];
+		}
+
+		if (hw_regs[DISK_STAT]) {	//raise clock or finish interrupt
+			if (disk_timer == 1024) {
+				disk_timer = 0;
+				disk_flag = 0;
+				hw_regs[DISK_CMD] = 0;
+				hw_regs[DISK_STAT] = 0;
+				hw_regs[IRQ1S] = 1;
+			} else 
+				disk_timer++;
+		}
+
+
+		temp_line = lines + pc;
 		temp_reg_val = temp_line->rs + temp_line->rt;
 
 		if (IS_IMM(temp_line->rs))
@@ -94,43 +142,42 @@ void cmd_regs(cmd lines[MAX_MEM_LEN], mem *dmemout, mem *diskout, uint32_t hw_re
 		if (IS_IMM(temp_line->rm))
 				regs[temp_line->rm] = (temp_line->rm == IMM1 ? temp_line->imm1 : temp_line->imm2);
 
-		write_trace(lines[cmd_line], pc, argv[TRACE], regs); // every command we want to update the trace
+		write_trace(lines[pc], pc, argv[TRACE], regs); // every command we want to update the trace
 
 		// checking if there is a illegal change to a ZERO or IMM registers  
 		if (IS_WRITEABLE(temp_line->rd) && (temp_line->name >= ADD || temp_line->name <= SRL || temp_line->name == JAL || temp_line->name == LW || temp_line->name == IN)) {
 			pc++;
 			hw_regs[CLKS]++;
-			cmd_line++;
 			continue;
 		}
 		// else we change the imm registers if we use them in the current command and execute the command according to the operation 
 		else {
 			switch (temp_line->name) {
-				case 0:
+				case ADD:
 					regs[temp_line->rd] = regs[temp_line->rs] + regs[temp_line->rt] + regs[temp_line->rm];
 					break;
-				case 1:
+				case SUB:
 					regs[temp_line->rd] = regs[temp_line->rs] - regs[temp_line->rt] - regs[temp_line->rm];
 					break;
-				case 2:
+				case MAC:
 					regs[temp_line->rd] = regs[temp_line->rs] * regs[temp_line->rt] - regs[temp_line->rm];
 					break;
-				case 3:
+				case AND:
 					regs[temp_line->rd] = regs[temp_line->rs] & regs[temp_line->rt] & regs[temp_line->rm];
 					break;
-				case 4:
+				case OR:
 					regs[temp_line->rd] = regs[temp_line->rs] | regs[temp_line->rt] | regs[temp_line->rm];
 					break;
-				case 5:
+				case XOR:
 					regs[temp_line->rd] = regs[temp_line->rs] ^ regs[temp_line->rt] ^ regs[temp_line->rm];
 					break;
-				case 6:
+				case SLL:
 					regs[temp_line->rd] = regs[temp_line->rs] << regs[temp_line->rt];
 					break;
-				case 7:
+				case SRA:
 					regs[temp_line->rd] = regs[temp_line->rs] >> regs[temp_line->rt];
 					break;
-				case 8:
+				case SRL:
 					if(regs[temp_line->rs] & msb_1){
 						regs[temp_line->rd] = (int)((unsigned int)regs[temp_line->rs] >> regs[temp_line->rt]) ; 
 					}
@@ -138,79 +185,68 @@ void cmd_regs(cmd lines[MAX_MEM_LEN], mem *dmemout, mem *diskout, uint32_t hw_re
 						regs[temp_line->rd] = regs[temp_line->rs] >> regs[temp_line->rt] ;
 					pc++;
 					hw_regs[CLKS]++;
-					cmd_line++;
 					break;	
-				case 9 :
+				case BEQ:
 					if(regs[temp_line->rs] == regs[temp_line->rt]){
 						pc = regs[temp_line->rm];
 						hw_regs[CLKS]++;
-						cmd_line = regs[temp_line->rm];
 						break;
 					}
 					pc++;
 					hw_regs[CLKS]++;
-					cmd_line++;
+					
 					break;
-				case 10:
+				case BNE:
 					if (regs[temp_line->rs] != regs[temp_line->rt]) {
 						pc = regs[temp_line->rm];
 						hw_regs[CLKS]++;
-						cmd_line = regs[temp_line->rm];
 						break;
 					}
 					pc++;
 					hw_regs[CLKS]++;
-					cmd_line++;
+					
 					break;
-				case 11 :
+				case BLT:
 					if (regs[temp_line->rs] < regs[temp_line->rt]) {
 						pc = regs[temp_line->rm];
 						hw_regs[CLKS]++;
-						cmd_line = regs[temp_line->rm];
 						break;
 					}
 					pc++;
 					hw_regs[CLKS]++;
-					cmd_line++;
+					
 					break;
-				case 12:
+				case BGT:
 					if (regs[temp_line->rs] > regs[temp_line->rt]) {
 						pc = regs[temp_line->rm];
 						hw_regs[CLKS]++;
-						cmd_line = regs[temp_line->rm];
 						break;
 					}
 					pc++;
 					hw_regs[CLKS]++;
-					cmd_line++;
 					break;
-				case 13 :
+				case BLE:
 					if(regs[temp_line->rs] <= regs[temp_line->rt]){
 						pc = regs[temp_line->rm];
 						hw_regs[CLKS]++;
-						cmd_line = regs[temp_line->rm];
 						break;
 					}
 					pc++;
 					hw_regs[CLKS]++;
-					cmd_line++;
 					break;
-				case 14:
+				case BGE:
 					if(regs[temp_line->rs] >= regs[temp_line->rt]){
 						pc = regs[temp_line->rm];
 						hw_regs[CLKS]++;
-						cmd_line = regs[temp_line->rm];
 						break;
 					}
 					pc++;
 					hw_regs[CLKS]++;
-					cmd_line++;
 					break;
-				case 15:
+				case JAL:
 					regs[temp_line->rd] = pc + 1;
 					pc = regs[temp_line->rm];
 					hw_regs[CLKS]++;
-					cmd_line = regs[temp_line->rm];
 					break;
 				case LW:
 					temp_line->rd = dmemout->mem[temp_line->rs + temp_line->rt] + temp_line->rm;
@@ -220,19 +256,16 @@ void cmd_regs(cmd lines[MAX_MEM_LEN], mem *dmemout, mem *diskout, uint32_t hw_re
 					dmemout->max_addr = dmemout->max_addr < temp_line->rs + temp_line->rt ? temp_line->rs + temp_line->rt : dmemout->max_addr;
 					break;
 				case RETI:
+					irq_flag = 0;
 					pc = hw_regs[IRQ_R];
 					break;
 				case IN:
 					switch (temp_reg_val) {
-						case IRQ0E:
-						case IRQ1E:
-						case IRQ2E:
-						case LEDS:
-						case MON_ADDR:
-						case MON_DATA:
-							temp_line->rd = hw_regs[temp_reg_val];
 						case MON_CMD:
 							temp_line->rd = 0;
+							break;
+						default:
+							temp_line->rd = hw_regs[temp_reg_val];
 							break;
 					}
 					break;
@@ -241,8 +274,8 @@ void cmd_regs(cmd lines[MAX_MEM_LEN], mem *dmemout, mem *diskout, uint32_t hw_re
 						case IRQ0E:
 						case IRQ1E:
 						case IRQ2E:
+						case TIMER_E:
 							hw_regs[temp_reg_val] = 1;
-							hw_regs[temp_reg_val + 3] = 1;
 							break;
 						case DISP:
 							hw_regs[DISP] = temp_line->rm;
@@ -252,9 +285,24 @@ void cmd_regs(cmd lines[MAX_MEM_LEN], mem *dmemout, mem *diskout, uint32_t hw_re
 							hw_regs[LEDS] = temp_line->rm;
 							write_leds(argv[LEDS], hw_regs);
 							break;
-						case MON_ADDR:
-						case MON_DATA:
-						case MON_CMD:
+						case DISK_CMD:
+							if (hw_regs[DISK_STAT])
+								break;
+							else {
+								if (disk_flag == 2) {
+									hw_regs[DISK_STAT] = 1;
+									hw_regs[temp_reg_val] = temp_line->rm;
+								}
+							}
+							break;
+						case DISK_SEC:
+						case DISK_BUF:
+							if (hw_regs[DISK_STAT]) {
+								hw_regs[temp_reg_val] = temp_line->rm;
+								disk_flag++;
+							}
+							break;
+						default:
 							hw_regs[temp_reg_val] = temp_line->rm;
 							break;
 					}
@@ -263,10 +311,21 @@ void cmd_regs(cmd lines[MAX_MEM_LEN], mem *dmemout, mem *diskout, uint32_t hw_re
 			if (temp_line->name >= 0 || temp_line->name < 8) {
 				pc++;
 				hw_regs[CLKS]++;
-				cmd_line++;
 			}
+
 			if (temp_line->name == IN || temp_line->name == OUT)
 				write_hwtrace(argv[HWTRACE], temp_line->rs + temp_line->rt, hw_regs, temp_line->name);
+
+			if (hw_regs[DISK_CMD] && disk_timer == 1024) {
+				for (int i = 0; i < SEC_SIZE; i++) {
+					if (hw_regs[DISK_CMD] == 1) {	//read
+						*((uint32_t *)hw_regs[DISK_BUF] + i) = dmemout->mem[128 * hw_regs[DISK_SEC] + i];
+					}
+					else { 	//write
+						dmemout->mem[128 * hw_regs[DISK_SEC] + i] = *((uint32_t *)hw_regs[DISK_BUF] + i);
+					}
+				}
+			}
 
 			if (hw_regs[MON_CMD]) {
 				monitor[hw_regs[MON_ADDR]] = hw_regs[MON_DATA];
@@ -302,7 +361,7 @@ void sim(char const *argv[]) {
 
 	mem *dmemout = (mem *)calloc(1, sizeof(mem));
 	dmemin = fopen(argv[DMEMIN], "r");
-	for (line = 0; fscanf(dmemin, "%08X", &dmemout->mem[line]) != EOF; line++);
+	for (line = 0; fscanf(dmemin, "%08X", &(dmemout->mem[line])) != EOF; line++);
 	fclose(dmemin);
 	dmemout->max_addr = line - 1;
 
@@ -310,17 +369,17 @@ void sim(char const *argv[]) {
 	for (line = 0; fscanf(imemin, "%02X%01X%01X%01X%01X%03X%03X", &lines[line].name, &lines[line].rd, &lines[line].rs, &lines[line].rt, &lines[line].rm, &lines[line].imm1, &lines[line].imm2) != EOF; line++);
 	fclose(imemin);
 	
-	mem *diskout = (mem *)calloc(1, sizeof(mem));
+	disk *diskout = (disk *)calloc(1, sizeof(disk));
 	diskin = fopen(argv[DISKIN], "r");
-	for (line = 0; fscanf(diskin, "%08X", &diskout->mem[line]) != EOF; line++);
+	for (line = 0; fscanf(diskin, "%08X", &(diskout->mem[line])) != EOF; line++);
 	fclose(diskin);
-	diskout->max_addr = line - 1;
+	diskout->max_addr = line > 0 ? line - 1 : 0;
 
 	cmd_regs(lines, dmemout, diskout, hw_regs, regs, argv);
 
 	write_clk(argv[CYCLES], hw_regs[CLKS]);
 	write_mem(dmemout, DMEMOUT, argv);
-	write_mem(diskout, DISKOUT, argv);
+	write_disk(diskout, DISKOUT, argv);
 
 	free(dmemout);
 	free(diskout);

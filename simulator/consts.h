@@ -11,6 +11,8 @@
 #define REG_LEN		4
 #define IMM_LEN		12
 #define MON_SIZE	0x10000
+#define SEC_SIZE 	128
+#define DISK_SIZE	512000
 
 // Registers
 #define ZERO 	0
@@ -44,7 +46,7 @@
 #define LEDS		9
 #define DISP		10
 #define TIMER_E		11
-#define TIMER_Q		12
+#define TIMER_C		12
 #define TIMER_MAX	13
 #define DISK_CMD	14
 #define DISK_SEC	15
@@ -101,8 +103,13 @@ typedef struct {
 
 typedef struct {
 	int max_addr;
-	uint16_t mem[MAX_MEM_LEN];
+	uint32_t mem[MAX_MEM_LEN];
 } mem;
+
+typedef struct {
+	int max_addr;
+	uint32_t mem[DISK_SIZE];
+} disk;
 
 const char hw_regs_names[HW_COUNT] = {
 	"irq0enable",
