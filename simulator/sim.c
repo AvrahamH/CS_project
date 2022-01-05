@@ -24,7 +24,7 @@ void write_clk(const char fname[], int clks) {
 	fclose(fp);
 }
 
-void write_regout(const char fname[], uint32_t regs[REG_COUNT - 3]) {
+void write_regout(const char fname[], uint32_t regs[REG_COUNT]) {
 	FILE *fp;
 	fp = fopen(fname, "w+");
 	for (int i = V0; i < REG_COUNT; i++)
@@ -45,14 +45,14 @@ void write_hwtrace(const char fname[], uint8_t reg_num, uint32_t hw_regs[HW_COUN
 void write_leds(const char fname[], uint32_t hw_regs[HW_COUNT]) {
 	FILE *fp;
 	fp = fopen(fname, "a");
-	fprintf(fp, "%03d %08X", hw_regs[CLKS], hw_regs[LEDS]);
+	fprintf(fp, "%d %08x\n", hw_regs[CLKS], hw_regs[LEDS]);
 	fclose(fp);
 }
 
 void write_disp(const char fname[], uint32_t hw_regs[HW_COUNT]) {
 	FILE *fp;
 	fp = fopen(fname, "a");
-	fprintf(fp, "%03d %08X\n", hw_regs[CLKS], hw_regs[DISP]);
+	fprintf(fp, "%d %08x\n", hw_regs[CLKS], hw_regs[DISP]);
 	fclose(fp);
 }
 
@@ -89,7 +89,8 @@ void write_disk(disk *memory, int type, char const *argv[]) {
  */
 void cmd_regs(cmd lines[MAX_MEM_LEN], mem *dmemout, disk *diskout, uint32_t hw_regs[HW_COUNT], uint32_t regs[REG_COUNT], char const *argv[]) {
 	int pc = 0, msb_1 = 1 << 31, irq = 0, irq2arr[MAX_MEM_LEN] = {0}, irq2clk = 0, irq_flag = 0, disk_timer = 0, disk_flag = 0;
-	uint8_t monitor[MON_SIZE] = {0}, temp_reg_val = 0;
+	uint8_t monitor[MON_SIZE] = { 0 };
+	uint32_t temp_reg_val = 0;
 	cmd *temp_line;
 	FILE *irq2in;
 
@@ -242,7 +243,7 @@ void cmd_regs(cmd lines[MAX_MEM_LEN], mem *dmemout, disk *diskout, uint32_t hw_r
 							break;
 						case LEDS:
 							hw_regs[LEDS] = regs[temp_line->rm];
-							write_leds(argv[LEDS], hw_regs);
+							write_leds(argv[LEDS_F], hw_regs);
 							break;
 						case DISK_CMD:
 							if (hw_regs[DISK_STAT])
@@ -340,8 +341,9 @@ void cmd_regs(cmd lines[MAX_MEM_LEN], mem *dmemout, disk *diskout, uint32_t hw_r
 	temp_reg_val = regs[temp_line->rs] + regs[temp_line->rt];
 
 	write_trace(lines[pc], pc, argv[TRACE], regs); // every command we want to update the trace
+	hw_regs[CLKS]++;
 
-	write_regout(argv[REGOUT], regs + 3);
+	write_regout(argv[REGOUT], regs);
 	write_monitor(argv[MON_T], argv[MON_YUV], monitor);
 }
 
@@ -369,9 +371,9 @@ void sim(char const *argv[]) {
 	FILE *fp;
 	fp = fopen(argv[TRACE], "w");
 	fclose(fp);
-	fp = fopen(argv[LEDS], "w");
+	fp = fopen(argv[LEDS_F], "w");
 	fclose(fp);
-	fp = fopen(argv[DISP], "w");
+	fp = fopen(argv[DISP_F], "w");
 	fclose(fp);
 	fp = fopen(argv[HWTRACE], "w");
 	fclose(fp);
