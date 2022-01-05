@@ -1,15 +1,16 @@
 #include "consts.h"
 
-#define TO_SIGNED(num) ((num & 0xFFF) | ((num & 0x800) ? ~0xFFF : 0))
+#define TO_SIGNED(x) ((x >> 11) == 0 ? x : -1 ^ 0xFFF | x)
+#define SIGN2INT(i) ((int)(IS_IMM(i) ? TO_SIGNED(regs[i]) & 0xFFFFFFFF : regs[i]))
 
 
 void write_trace(cmd line, uint16_t PC, const char fname[], uint32_t regs[]) {
 	char str[MAX_STRLEN], temp_str[MAX_STRLEN] = "00000000 ";
 	FILE *fp;
 	fp = fopen(fname, "a");
-	sprintf(str, "%03X %02X%01X%01X%01X%01X%03X%03X ", PC, line.name, line.rd, line.rs, line.rt, line.rm, line.imm1 & 0xFFF, line.imm2 & 0xFFF);
+	sprintf(str, "%03X %02X%01X%01X%01X%01X%03X%03X", PC, line.name, line.rd, line.rs, line.rt, line.rm, line.imm1 & 0xFFF, line.imm2 & 0xFFF);
 	for (int i = 0; i < REG_COUNT; i++) {
-		sprintf(temp_str, "%08x ", IS_IMM(i) ? TO_SIGNED(regs[i]) & 0xFF : regs[i]);
+		sprintf(temp_str, " %08x", IS_IMM(i) ? TO_SIGNED(regs[i]) & 0xFFFFFFFF : regs[i]);
 		strcat(str, temp_str);
 	}
 	fprintf(fp, "%s\n", str);
@@ -35,9 +36,9 @@ void write_hwtrace(const char fname[], uint8_t reg_num, uint32_t hw_regs[HW_COUN
 	FILE *fp;
 	fp = fopen(fname, "a");
 	if (op == IN)
-		fprintf(fp, "%03d READ %s %08X", hw_regs[CLKS], hw_regs_names[reg_num], hw_regs[reg_num]);
+		fprintf(fp, "%03d READ %s %08X\n", hw_regs[CLKS], hw_regs_names[reg_num], hw_regs[reg_num]);
 	else
-		fprintf(fp, "%03d WRITE %s %08X", hw_regs[CLKS], hw_regs_names[reg_num], hw_regs[reg_num]);
+		fprintf(fp, "%03d WRITE %s %08X\n", hw_regs[CLKS], hw_regs_names[reg_num], hw_regs[reg_num]);
 	fclose(fp);
 }
 
@@ -87,7 +88,7 @@ void write_disk(disk *memory, int type, char const *argv[]) {
  * disk_flag: to indicate if disk cmd, buffer and sector has been received
  */
 void cmd_regs(cmd lines[MAX_MEM_LEN], mem *dmemout, disk *diskout, uint32_t hw_regs[HW_COUNT], uint32_t regs[REG_COUNT], char const *argv[]) {
-	int pc = 0, msb_1 = 1 << 31, irq = 0, irq2arr[0xFFFFFFFF], irq2clk = 0, irq_flag = 0, disk_timer = 0, disk_flag = 0;
+	int pc = 0, msb_1 = 1 << 31, irq = 0, irq2arr[MAX_MEM_LEN] = {0}, irq2clk = 0, irq_flag = 0, disk_timer = 0, disk_flag = 0;
 	uint8_t monitor[MON_SIZE] = {0}, temp_reg_val = 0;
 	cmd *temp_line;
 	FILE *irq2in;
@@ -99,7 +100,6 @@ void cmd_regs(cmd lines[MAX_MEM_LEN], mem *dmemout, disk *diskout, uint32_t hw_r
 
 	// now we are going through the command lines and change the registers according to the command 
 	while((lines[pc].name != HALT) && (pc < 4095)) {
-
 		if (irq2arr[hw_regs[CLKS]]) //handling 
 			hw_regs[IRQ2S] = 1;
 
@@ -129,23 +129,24 @@ void cmd_regs(cmd lines[MAX_MEM_LEN], mem *dmemout, disk *diskout, uint32_t hw_r
 				disk_timer++;
 		}
 
-
+		regs[IMM1] = regs[IMM2] = 0;
 		temp_line = lines + pc;
-		temp_reg_val = temp_line->rs + temp_line->rt;
 
 		if (IS_IMM(temp_line->rs))
-				regs[temp_line->rs] = (temp_line->rs == IMM1 ? temp_line->imm1 : temp_line->imm2);
+				regs[temp_line->rs] = (temp_line->rs == IMM1 ? temp_line->imm1 : temp_line->imm2) & 0xFFF;
 
 		if (IS_IMM(temp_line->rt))
-				regs[temp_line->rt] = (temp_line->rt == IMM1 ? temp_line->imm1 : temp_line->imm2);	
+				regs[temp_line->rt] = (temp_line->rt == IMM1 ? temp_line->imm1 : temp_line->imm2) & 0xFFF;
 
 		if (IS_IMM(temp_line->rm))
-				regs[temp_line->rm] = (temp_line->rm == IMM1 ? temp_line->imm1 : temp_line->imm2);
+				regs[temp_line->rm] = (temp_line->rm == IMM1 ? temp_line->imm1 : temp_line->imm2) & 0xFFF;
+
+		temp_reg_val = regs[temp_line->rs] + regs[temp_line->rt];
 
 		write_trace(lines[pc], pc, argv[TRACE], regs); // every command we want to update the trace
 
 		// checking if there is a illegal change to a ZERO or IMM registers  
-		if (IS_WRITEABLE(temp_line->rd) && (temp_line->name >= ADD || temp_line->name <= SRL || temp_line->name == JAL || temp_line->name == LW || temp_line->name == IN)) {
+		if (IS_WRITEABLE(temp_line->rd) && ((temp_line->name >= ADD && temp_line->name <= SRL) || temp_line->name == JAL || temp_line->name == LW || temp_line->name == IN)) {
 			pc++;
 			hw_regs[CLKS]++;
 			continue;
@@ -154,13 +155,13 @@ void cmd_regs(cmd lines[MAX_MEM_LEN], mem *dmemout, disk *diskout, uint32_t hw_r
 		else {
 			switch (temp_line->name) {
 				case ADD:
-					regs[temp_line->rd] = regs[temp_line->rs] + regs[temp_line->rt] + regs[temp_line->rm];
+					regs[temp_line->rd] = SIGN2INT(temp_line->rs) + SIGN2INT(temp_line->rt) + SIGN2INT(temp_line->rm);
 					break;
 				case SUB:
-					regs[temp_line->rd] = regs[temp_line->rs] - regs[temp_line->rt] - regs[temp_line->rm];
+					regs[temp_line->rd] = SIGN2INT(temp_line->rs) - SIGN2INT(temp_line->rt) - SIGN2INT(temp_line->rm);;
 					break;
 				case MAC:
-					regs[temp_line->rd] = regs[temp_line->rs] * regs[temp_line->rt] - regs[temp_line->rm];
+					regs[temp_line->rd] = SIGN2INT(temp_line->rs) * SIGN2INT(temp_line->rt) - SIGN2INT(temp_line->rm);;
 					break;
 				case AND:
 					regs[temp_line->rd] = regs[temp_line->rs] & regs[temp_line->rt] & regs[temp_line->rm];
@@ -188,37 +189,34 @@ void cmd_regs(cmd lines[MAX_MEM_LEN], mem *dmemout, disk *diskout, uint32_t hw_r
 					break;	
 				case BEQ:
 					if(regs[temp_line->rs] == regs[temp_line->rt]){
-						pc = regs[temp_line->rm];
+						pc = regs[temp_line->rm] & 0xFFF;
 						hw_regs[CLKS]++;
 						break;
 					}
 					pc++;
 					hw_regs[CLKS]++;
-					
 					break;
 				case BNE:
 					if (regs[temp_line->rs] != regs[temp_line->rt]) {
-						pc = regs[temp_line->rm];
+						pc = regs[temp_line->rm] & 0xFFF;
 						hw_regs[CLKS]++;
 						break;
 					}
 					pc++;
 					hw_regs[CLKS]++;
-					
 					break;
 				case BLT:
 					if (regs[temp_line->rs] < regs[temp_line->rt]) {
-						pc = regs[temp_line->rm];
+						pc = regs[temp_line->rm] & 0xFFF;
 						hw_regs[CLKS]++;
 						break;
 					}
 					pc++;
 					hw_regs[CLKS]++;
-					
 					break;
 				case BGT:
 					if (regs[temp_line->rs] > regs[temp_line->rt]) {
-						pc = regs[temp_line->rm];
+						pc = regs[temp_line->rm] & 0xFFF;
 						hw_regs[CLKS]++;
 						break;
 					}
@@ -227,7 +225,7 @@ void cmd_regs(cmd lines[MAX_MEM_LEN], mem *dmemout, disk *diskout, uint32_t hw_r
 					break;
 				case BLE:
 					if(regs[temp_line->rs] <= regs[temp_line->rt]){
-						pc = regs[temp_line->rm];
+						pc = regs[temp_line->rm] & 0xFFF;
 						hw_regs[CLKS]++;
 						break;
 					}
@@ -236,7 +234,7 @@ void cmd_regs(cmd lines[MAX_MEM_LEN], mem *dmemout, disk *diskout, uint32_t hw_r
 					break;
 				case BGE:
 					if(regs[temp_line->rs] >= regs[temp_line->rt]){
-						pc = regs[temp_line->rm];
+						pc = regs[temp_line->rm] & 0xFFF;
 						hw_regs[CLKS]++;
 						break;
 					}
@@ -245,15 +243,19 @@ void cmd_regs(cmd lines[MAX_MEM_LEN], mem *dmemout, disk *diskout, uint32_t hw_r
 					break;
 				case JAL:
 					regs[temp_line->rd] = pc + 1;
-					pc = regs[temp_line->rm];
+					pc = regs[temp_line->rm] & 0xFFF;
 					hw_regs[CLKS]++;
 					break;
 				case LW:
-					temp_line->rd = dmemout->mem[temp_line->rs + temp_line->rt] + temp_line->rm;
+					regs[temp_line->rd] = dmemout->mem[temp_reg_val] + regs[temp_line->rm];
+					pc++;
+					hw_regs[CLKS]++;
 					break;
 				case SW:
-					dmemout->mem[temp_line->rs + temp_line->rt] = temp_line->rm + temp_line->rd;
-					dmemout->max_addr = dmemout->max_addr < temp_line->rs + temp_line->rt ? temp_line->rs + temp_line->rt : dmemout->max_addr;
+					dmemout->mem[temp_reg_val] = regs[temp_line->rm] + regs[temp_line->rd];
+					dmemout->max_addr = dmemout->max_addr < temp_reg_val ? temp_reg_val : dmemout->max_addr;
+					pc++;
+					hw_regs[CLKS]++;
 					break;
 				case RETI:
 					irq_flag = 0;
@@ -306,9 +308,11 @@ void cmd_regs(cmd lines[MAX_MEM_LEN], mem *dmemout, disk *diskout, uint32_t hw_r
 							hw_regs[temp_reg_val] = temp_line->rm;
 							break;
 					}
+					pc++;
+					hw_regs[CLKS]++;
 					break;
 			}
-			if (temp_line->name >= 0 || temp_line->name < 8) {
+			if (temp_line->name >= 0 && temp_line->name < 8) {
 				pc++;
 				hw_regs[CLKS]++;
 			}
@@ -358,6 +362,16 @@ void sim(char const *argv[]) {
 	uint16_t PC = 0;
 	FILE *imemin, *dmemin, *diskin;
 	cmd lines[MAX_MEM_LEN] = {0};
+
+	FILE *fp;
+	fp = fopen(argv[TRACE], "w");
+	fclose(fp);
+	fp = fopen(argv[LEDS], "w");
+	fclose(fp);
+	fp = fopen(argv[DISP], "w");
+	fclose(fp);
+	fp = fopen(argv[HWTRACE], "w");
+	fclose(fp);
 
 	mem *dmemout = (mem *)calloc(1, sizeof(mem));
 	dmemin = fopen(argv[DMEMIN], "r");

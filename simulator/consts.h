@@ -1,9 +1,11 @@
 #ifndef CONSTS_H
 #define CONSTS_H
 
+#define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 #define MAX_STRLEN	500
 #define MAX_LABEL	50
@@ -111,7 +113,7 @@ typedef struct {
 	uint32_t mem[DISK_SIZE];
 } disk;
 
-const char hw_regs_names[HW_COUNT] = {
+const char hw_regs_names[HW_COUNT][20] = {
 	"irq0enable",
 	"irq1enable",
 	"irq2enable",

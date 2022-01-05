@@ -1,7 +1,8 @@
+#define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include "consts.h"
-
 
 int hex2dec(char hex[]) {
 	int len = strlen(hex), base = 1, dec = 0;
@@ -115,7 +116,7 @@ void parse_asm(char *program, char *imemin, char *dmemin) {
 	}
 
 	fp = fopen(program, "r");
-	while (fgets(line, MAX_STRLEN, fp)) {
+	while (fgets(line, MAX_STRLEN, fp) != NULL) {
 		strcpy(temp_line, line);
 		str = strtok(temp_line, ":");
 		if (strcmp(line, str)) {	//if it's a label
@@ -130,7 +131,7 @@ void parse_asm(char *program, char *imemin, char *dmemin) {
 
 	rewind(fp);
 
-	while (fgets(line, MAX_STRLEN, fp)) {
+	while (fgets(line, MAX_STRLEN, fp) != NULL) {
 		strcpy(temp_line, line);
 		str = strtok(temp_line, ":");
 		if (!strcmp(line, str))	//if it's a command
