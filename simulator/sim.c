@@ -36,9 +36,9 @@ void write_hwtrace(const char fname[], uint8_t reg_num, uint32_t hw_regs[HW_COUN
 	FILE *fp;
 	fp = fopen(fname, "a");
 	if (op == IN)
-		fprintf(fp, "%03d READ %s %08X\n", hw_regs[CLKS], hw_regs_names[reg_num], hw_regs[reg_num]);
+		fprintf(fp, "%d READ %s %08x\n", hw_regs[CLKS], hw_regs_names[reg_num], hw_regs[reg_num]);
 	else
-		fprintf(fp, "%03d WRITE %s %08X\n", hw_regs[CLKS], hw_regs_names[reg_num], hw_regs[reg_num]);
+		fprintf(fp, "%d WRITE %s %08x\n", hw_regs[CLKS], hw_regs_names[reg_num], hw_regs[reg_num]);
 	fclose(fp);
 }
 
@@ -52,7 +52,7 @@ void write_leds(const char fname[], uint32_t hw_regs[HW_COUNT]) {
 void write_disp(const char fname[], uint32_t hw_regs[HW_COUNT]) {
 	FILE *fp;
 	fp = fopen(fname, "a");
-	fprintf(fp, "%03d %08X", hw_regs[CLKS], hw_regs[DISP]);
+	fprintf(fp, "%03d %08X\n", hw_regs[CLKS], hw_regs[DISP]);
 	fclose(fp);
 }
 
@@ -100,35 +100,6 @@ void cmd_regs(cmd lines[MAX_MEM_LEN], mem *dmemout, disk *diskout, uint32_t hw_r
 
 	// now we are going through the command lines and change the registers according to the command 
 	while((lines[pc].name != HALT) && (pc < 4095)) {
-		if (irq2arr[hw_regs[CLKS]]) //handling 
-			hw_regs[IRQ2S] = 1;
-
-		if (hw_regs[TIMER_E]) {	//handling timer
-			hw_regs[TIMER_C]++;
-			if (hw_regs[TIMER_MAX] == hw_regs[TIMER_C]) {
-				hw_regs[IRQ0S] = 1;
-				hw_regs[TIMER_C] = 0;
-			}
-		}
-
-		irq = (hw_regs[IRQ0E] && hw_regs[IRQ0S]) || (hw_regs[IRQ1E] && hw_regs[IRQ1S]) || (hw_regs[IRQ1E] && hw_regs[IRQ2S]);
-
-		if (irq && !irq_flag) {
-			irq_flag = 1;
-			pc = hw_regs[IRQ_H];
-		}
-
-		if (hw_regs[DISK_STAT]) {	//raise clock or finish interrupt
-			if (disk_timer == 1024) {
-				disk_timer = 0;
-				disk_flag = 0;
-				hw_regs[DISK_CMD] = 0;
-				hw_regs[DISK_STAT] = 0;
-				hw_regs[IRQ1S] = 1;
-			} else 
-				disk_timer++;
-		}
-
 		regs[IMM1] = regs[IMM2] = 0;
 		temp_line = lines + pc;
 
@@ -185,91 +156,77 @@ void cmd_regs(cmd lines[MAX_MEM_LEN], mem *dmemout, disk *diskout, uint32_t hw_r
 					else
 						regs[temp_line->rd] = regs[temp_line->rs] >> regs[temp_line->rt] ;
 					pc++;
-					hw_regs[CLKS]++;
 					break;	
 				case BEQ:
 					if(regs[temp_line->rs] == regs[temp_line->rt]){
 						pc = regs[temp_line->rm] & 0xFFF;
-						hw_regs[CLKS]++;
 						break;
 					}
 					pc++;
-					hw_regs[CLKS]++;
 					break;
 				case BNE:
 					if (regs[temp_line->rs] != regs[temp_line->rt]) {
 						pc = regs[temp_line->rm] & 0xFFF;
-						hw_regs[CLKS]++;
 						break;
 					}
 					pc++;
-					hw_regs[CLKS]++;
 					break;
 				case BLT:
 					if (regs[temp_line->rs] < regs[temp_line->rt]) {
 						pc = regs[temp_line->rm] & 0xFFF;
-						hw_regs[CLKS]++;
 						break;
 					}
 					pc++;
-					hw_regs[CLKS]++;
 					break;
 				case BGT:
 					if (regs[temp_line->rs] > regs[temp_line->rt]) {
 						pc = regs[temp_line->rm] & 0xFFF;
-						hw_regs[CLKS]++;
 						break;
 					}
 					pc++;
-					hw_regs[CLKS]++;
 					break;
 				case BLE:
 					if(regs[temp_line->rs] <= regs[temp_line->rt]){
 						pc = regs[temp_line->rm] & 0xFFF;
-						hw_regs[CLKS]++;
 						break;
 					}
 					pc++;
-					hw_regs[CLKS]++;
 					break;
 				case BGE:
 					if(regs[temp_line->rs] >= regs[temp_line->rt]){
 						pc = regs[temp_line->rm] & 0xFFF;
-						hw_regs[CLKS]++;
 						break;
 					}
 					pc++;
-					hw_regs[CLKS]++;
 					break;
 				case JAL:
 					regs[temp_line->rd] = pc + 1;
 					pc = regs[temp_line->rm] & 0xFFF;
-					hw_regs[CLKS]++;
 					break;
 				case LW:
 					regs[temp_line->rd] = dmemout->mem[temp_reg_val] + regs[temp_line->rm];
 					pc++;
-					hw_regs[CLKS]++;
 					break;
 				case SW:
 					dmemout->mem[temp_reg_val] = regs[temp_line->rm] + regs[temp_line->rd];
 					dmemout->max_addr = dmemout->max_addr < temp_reg_val ? temp_reg_val : dmemout->max_addr;
 					pc++;
-					hw_regs[CLKS]++;
 					break;
 				case RETI:
 					irq_flag = 0;
+					hw_regs[IRQ0S] = hw_regs[IRQ1S] = hw_regs[IRQ2S] = 0;
 					pc = hw_regs[IRQ_R];
 					break;
 				case IN:
 					switch (temp_reg_val) {
 						case MON_CMD:
-							temp_line->rd = 0;
+							regs[temp_line->rd] = 0;
 							break;
 						default:
-							temp_line->rd = hw_regs[temp_reg_val];
+							regs[temp_line->rd] = hw_regs[temp_reg_val];
 							break;
 					}
+					pc++;
 					break;
 				case OUT:
 					switch (temp_reg_val) {
@@ -280,11 +237,11 @@ void cmd_regs(cmd lines[MAX_MEM_LEN], mem *dmemout, disk *diskout, uint32_t hw_r
 							hw_regs[temp_reg_val] = 1;
 							break;
 						case DISP:
-							hw_regs[DISP] = temp_line->rm;
+							hw_regs[DISP] = regs[temp_line->rm];
 							write_disp(argv[DISP_F], hw_regs);
 							break;
 						case LEDS:
-							hw_regs[LEDS] = temp_line->rm;
+							hw_regs[LEDS] = regs[temp_line->rm];
 							write_leds(argv[LEDS], hw_regs);
 							break;
 						case DISK_CMD:
@@ -293,32 +250,31 @@ void cmd_regs(cmd lines[MAX_MEM_LEN], mem *dmemout, disk *diskout, uint32_t hw_r
 							else {
 								if (disk_flag == 2) {
 									hw_regs[DISK_STAT] = 1;
-									hw_regs[temp_reg_val] = temp_line->rm;
+									hw_regs[temp_reg_val] = regs[temp_line->rm];
 								}
 							}
 							break;
 						case DISK_SEC:
 						case DISK_BUF:
 							if (hw_regs[DISK_STAT]) {
-								hw_regs[temp_reg_val] = temp_line->rm;
+								hw_regs[temp_reg_val] = regs[temp_line->rm];
 								disk_flag++;
 							}
 							break;
 						default:
-							hw_regs[temp_reg_val] = temp_line->rm;
+							hw_regs[temp_reg_val] = regs[temp_line->rm];
 							break;
 					}
 					pc++;
-					hw_regs[CLKS]++;
 					break;
 			}
 			if (temp_line->name >= 0 && temp_line->name < 8) {
 				pc++;
-				hw_regs[CLKS]++;
+				
 			}
 
 			if (temp_line->name == IN || temp_line->name == OUT)
-				write_hwtrace(argv[HWTRACE], temp_line->rs + temp_line->rt, hw_regs, temp_line->name);
+				write_hwtrace(argv[HWTRACE], temp_reg_val, hw_regs, temp_line->name);
 
 			if (hw_regs[DISK_CMD] && disk_timer == 1024) {
 				for (int i = 0; i < SEC_SIZE; i++) {
@@ -335,9 +291,56 @@ void cmd_regs(cmd lines[MAX_MEM_LEN], mem *dmemout, disk *diskout, uint32_t hw_r
 				monitor[hw_regs[MON_ADDR]] = hw_regs[MON_DATA];
 				hw_regs[MON_CMD] = 0;
 			}
-
 		}
+		if (irq2arr[hw_regs[CLKS]]) { //handling irq2
+			hw_regs[IRQ2S] = 1;
+		}
+
+		if (hw_regs[TIMER_E]) {	//handling timer
+			hw_regs[TIMER_C]++;
+			if (hw_regs[TIMER_MAX] == hw_regs[TIMER_C]) {
+				hw_regs[IRQ0S] = 1;
+				hw_regs[TIMER_C] = 0;
+			}
+		}
+
+		irq = (hw_regs[IRQ0E] && hw_regs[IRQ0S]) || (hw_regs[IRQ1E] && hw_regs[IRQ1S]) || (hw_regs[IRQ2E] && hw_regs[IRQ2S]);
+
+		if (hw_regs[DISK_STAT]) {	//raise clock or finish interrupt
+			if (disk_timer == 1024) {
+				disk_timer = 0;
+				disk_flag = 0;
+				hw_regs[DISK_CMD] = 0;
+				hw_regs[DISK_STAT] = 0;
+				hw_regs[IRQ1S] = 1;
+			}
+			else
+				disk_timer++;
+		}
+
+		if (irq && !irq_flag) {
+			irq_flag = 1;
+			hw_regs[IRQ_R] = pc;
+			pc = hw_regs[IRQ_H];
+		}
+		hw_regs[CLKS]++;
 	}
+	regs[IMM1] = regs[IMM2] = 0;
+	temp_line = lines + pc;
+
+	if (IS_IMM(temp_line->rs))
+		regs[temp_line->rs] = (temp_line->rs == IMM1 ? temp_line->imm1 : temp_line->imm2) & 0xFFF;
+
+	if (IS_IMM(temp_line->rt))
+		regs[temp_line->rt] = (temp_line->rt == IMM1 ? temp_line->imm1 : temp_line->imm2) & 0xFFF;
+
+	if (IS_IMM(temp_line->rm))
+		regs[temp_line->rm] = (temp_line->rm == IMM1 ? temp_line->imm1 : temp_line->imm2) & 0xFFF;
+
+	temp_reg_val = regs[temp_line->rs] + regs[temp_line->rt];
+
+	write_trace(lines[pc], pc, argv[TRACE], regs); // every command we want to update the trace
+
 	write_regout(argv[REGOUT], regs + 3);
 	write_monitor(argv[MON_T], argv[MON_YUV], monitor);
 }
@@ -391,7 +394,7 @@ void sim(char const *argv[]) {
 
 	cmd_regs(lines, dmemout, diskout, hw_regs, regs, argv);
 
-	write_clk(argv[CYCLES], hw_regs[CLKS]);
+	write_clk(argv[CYCLES], (int)hw_regs[CLKS]);
 	write_mem(dmemout, DMEMOUT, argv);
 	write_disk(diskout, DISKOUT, argv);
 
