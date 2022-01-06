@@ -88,15 +88,14 @@ void write_disk(disk *memory, int type, char const *argv[]) {
  * disk_flag: to indicate if disk cmd, buffer and sector has been received
  */
 void cmd_regs(cmd lines[MAX_MEM_LEN], mem *dmemout, disk *diskout, uint32_t hw_regs[HW_COUNT], uint32_t regs[REG_COUNT], char const *argv[]) {
-	int pc = 0, msb_1 = 1 << 31, irq = 0, irq2arr[MAX_MEM_LEN] = {0}, irq2clk = 0, irq_flag = 0, disk_timer = 0, disk_flag = 0;
+	int pc = 0, msb_1 = 1 << 31, irq = 0, irq2arr[MAX_MEM_LEN] = {0}, irq2count = 0, irq_flag = 0, disk_timer = 0, disk_flag = 0;
 	uint8_t monitor[MON_SIZE] = { 0 };
 	uint32_t temp_reg_val = 0;
 	cmd *temp_line;
 	FILE *irq2in;
 
 	irq2in = fopen(argv[IRQ2IN], "r");
-	for (int i = 0; fscanf(irq2in, "%d\n", &irq2clk) != EOF; i++)
-		irq2arr[irq2clk] = 1;
+	for (int i = 0; fscanf(irq2in, "%d\n", irq2arr[i]) != EOF; i++);
 	fclose(irq2in);
 
 	// now we are going through the command lines and change the registers according to the command 
@@ -133,7 +132,7 @@ void cmd_regs(cmd lines[MAX_MEM_LEN], mem *dmemout, disk *diskout, uint32_t hw_r
 					regs[temp_line->rd] = SIGN2INT(temp_line->rs) - SIGN2INT(temp_line->rt) - SIGN2INT(temp_line->rm);;
 					break;
 				case MAC:
-					regs[temp_line->rd] = SIGN2INT(temp_line->rs) * SIGN2INT(temp_line->rt) - SIGN2INT(temp_line->rm);;
+					regs[temp_line->rd] = SIGN2INT(temp_line->rs) * SIGN2INT(temp_line->rt) + SIGN2INT(temp_line->rm);;
 					break;
 				case AND:
 					regs[temp_line->rd] = regs[temp_line->rs] & regs[temp_line->rt] & regs[temp_line->rm];
@@ -269,10 +268,8 @@ void cmd_regs(cmd lines[MAX_MEM_LEN], mem *dmemout, disk *diskout, uint32_t hw_r
 					pc++;
 					break;
 			}
-			if (temp_line->name >= 0 && temp_line->name < 8) {
+			if (temp_line->name >= 0 && temp_line->name < 8)
 				pc++;
-				
-			}
 
 			if (temp_line->name == IN || temp_line->name == OUT)
 				write_hwtrace(argv[HWTRACE], temp_reg_val, hw_regs, temp_line->name);
@@ -293,8 +290,9 @@ void cmd_regs(cmd lines[MAX_MEM_LEN], mem *dmemout, disk *diskout, uint32_t hw_r
 				hw_regs[MON_CMD] = 0;
 			}
 		}
-		if (irq2arr[hw_regs[CLKS]]) { //handling irq2
+		if (irq2arr[irq2count] == hw_regs[CLKS]) { //handling irq2
 			hw_regs[IRQ2S] = 1;
+			irq2count++;
 		}
 
 		if (hw_regs[TIMER_E]) {	//handling timer
