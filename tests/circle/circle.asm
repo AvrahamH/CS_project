@@ -1,4 +1,4 @@
-	.word 0x100 50
+	.word 0x100 75
 
 	sll $sp, $imm1, $imm2, $zero, 1, 10			# set $sp = 1 << 10 = 1024
 	lw $a0, $zero, $imm2, $zero, 0, 0x100		# get R from address 0x100
