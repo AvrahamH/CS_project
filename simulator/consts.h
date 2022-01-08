@@ -103,11 +103,13 @@ typedef struct {
 	int16_t imm2;
 } cmd;
 
+// a struct to describe a memory
 typedef struct {
 	int max_addr;
 	uint32_t mem[MAX_MEM_LEN];
 } mem;
 
+// a struct to describe a disk
 typedef struct {
 	int max_addr;
 	uint32_t mem[DISK_SIZE];
