@@ -5,11 +5,13 @@
 #include <ctype.h>
 #include "consts.h"
 
+// clear all space chars from the string
 void remove_space(char *s) {
 	char *d = s;
 	do while (isspace(*s)) s++; while (*d++ = *s++);
 }
 
+// converts hex string to decimal value
 int hex2dec(char hex[]) {
 	int len = strlen(hex), base = 1, dec = 0;
 	for (int i = len - 1; i >= 0; i--) {
@@ -124,7 +126,7 @@ void parse_asm(char *program, char *imemin, char *dmemin) {
 			continue;
 		strcpy(temp_line, line);
 		str = strtok(temp_line, ":");
-		if (strcmp(line, str)) {	//if it's a label
+		if (strcmp(line, str)) {	//if it's a label - keep the address
 			label_arr[label_count].name = (char*)malloc(sizeof(char) * MAX_LABEL);
 			remove_space(str);
 			strcpy(label_arr[label_count].name, str);
@@ -132,7 +134,7 @@ void parse_asm(char *program, char *imemin, char *dmemin) {
 			label_count++;
 			label_arr = (label*)realloc(label_arr, sizeof(label) * (label_count + 1));
 
-			strcpy(temp_line, line);
+			strcpy(temp_line, line);	//handle label and a command in the same line
 			str = strtok(temp_line, ":");
 			str = strtok(NULL, " \r\n\t");
 			if (str != NULL)
@@ -154,12 +156,13 @@ void parse_asm(char *program, char *imemin, char *dmemin) {
 		if (!strcmp(line, str)) //if it's a command
 			parse_cmd(line, label_arr, label_count, imemin, words, &max_addr);
 		else {					//if it's a label
-			str = strtok(NULL, " \r\n\t");
+			str = strtok(NULL, " \r\n\t");	//handle label and a command in the same line
 			if (str != NULL)
 				parse_cmd(str, label_arr, label_count, imemin, words, &max_addr);
 		}
 	}
 
+	//write dmemin file after collecting data
 	dmem = fopen(dmemin, "w+");
 	for (int i = 0; i < max_addr + 1; i++)
 		fprintf(dmem, "%08X\n", words[i]);
